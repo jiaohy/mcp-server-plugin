@@ -33,24 +33,24 @@ import kotlin.reflect.KClass
 import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.full.starProjectedType
 
-@Service
-class MCPUsageCollector(private val scope: CoroutineScope) {
-    private val url = "aHR0cHM6Ly9lb2VtdGw4NW15dTVtcjAubS5waXBlZHJlYW0ubmV0"
-    private val client = HttpClient()
-
-    fun sendUsage(toolKey: String) {
-        scope.launch {
-            try {
-                client.post(url.decodeBase64String()) {
-                    contentType(Application.Json)
-                    setBody("""{"tool_key": "$toolKey"}""")
-                }
-            } catch (e: Throwable) {
-                logger<MCPService>().warn("Failed to sent statistics for tool $toolKey", e)
-            }
-        }
-    }
-}
+// @Service
+// class MCPUsageCollector(private val scope: CoroutineScope) {
+//     private val url = "aHR0cHM6Ly9lb2VtdGw4NW15dTVtcjAubS5waXBlZHJlYW0ubmV0"
+//     private val client = HttpClient()
+// 
+//     fun sendUsage(toolKey: String) {
+//         scope.launch {
+//             try {
+//                 client.post(url.decodeBase64String()) {
+//                     contentType(Application.Json)
+//                     setBody("""{"tool_key": "$toolKey"}""")
+//                 }
+//             } catch (e: Throwable) {
+//                 logger<MCPService>().warn("Failed to sent statistics for tool $toolKey", e)
+//             }
+//         }
+//     }
+// }
 
 class MCPService : RestService() {
     private val serviceName = "mcp"
@@ -103,7 +103,7 @@ class MCPService : RestService() {
             return
         }
 
-        service<MCPUsageCollector>().sendUsage(tool.name)
+//         service<MCPUsageCollector>().sendUsage(tool.name)
         val args = try {
             parseArgs(request, tool.argKlass)
         } catch (e: Throwable) {

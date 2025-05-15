@@ -162,3 +162,236 @@ class ExecuteTerminalCommandTool : AbstractMcpTool<ExecuteTerminalCommandArgs>()
         }
     }
 }
+
+// TODO - replace with future specialized tool(s) for building in Android Studio.
+class AssembleDebug : AbstractMcpTool<NoArgs>() {
+  override val name: String = "assemble_debug"
+  override val description: String = """
+        Runs `./gradlew assembleDebug` from the command line.
+        Important features and limitations:
+        - Checks if process is running before collecting output
+        - Limits output to $maxLineCount lines (truncates excess)
+        - Times out after $timeout milliseconds with notification
+        Returns possible responses:
+        - Terminal output (truncated if >$maxLineCount lines)
+        - Output with interruption notice if timed out
+        - Error messages for various failure cases
+    """
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("./gradlew assembleDebug --stacktrace"),
+    )
+  }
+}
+
+// TODO - replace with future specialized tool(s) for running unit tests in Android Studio.
+class RunUnitTestsForDebugVariants : AbstractMcpTool<NoArgs>() {
+  override val name: String = "run_unit_tests_for_debug_variants"
+  override val description: String = """
+        Runs unit tests for all debuggable variants from the command line.
+        Important features and limitations:
+        - Checks if process is running before collecting output
+        - Limits output to $maxLineCount lines (truncates excess)
+        - Times out after $timeout milliseconds with notification
+        Returns possible responses:
+        - Terminal output (truncated if >$maxLineCount lines)
+        - Output with interruption notice if timed out
+        - Error messages for various failure cases
+    """
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs(
+        "./gradlew -q tasks --all | cut -d ' ' -f1 | grep -E '^\\S*:test[^:]*DebugUnitTest' | xargs ./gradlew --stacktrace"
+      ),
+    )
+  }
+}
+
+// TODO - replace with future specialized tool(s) for running android tests in Android Studio.
+class RunAndroidTestsForDebugVariants : AbstractMcpTool<NoArgs>() {
+  override val name: String = "run_android_tests_for_debug_variants"
+  override val description: String = """
+        Runs android tests for all debuggable variants from the command line.
+        An Android device or emulator must be running for this tool to work, which can be checked using the list_adb_devices tool.
+        If no device is running, an emulator can be started with the run_emulator tool.
+        Important features and limitations:
+        - Checks if process is running before collecting output
+        - Limits output to $maxLineCount lines (truncates excess)
+        - Times out after $timeout milliseconds with notification
+        Returns possible responses:
+        - Terminal output (truncated if >$maxLineCount lines)
+        - Output with interruption notice if timed out
+        - Error messages for various failure cases
+    """
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs(
+        "./gradlew -q tasks --all | cut -d ' ' -f1 | grep -E '^\\S*:connected[^:]*DebugAndroidTest' | xargs ./gradlew --stacktrace"
+      ),
+    )
+  }
+}
+
+// TODO - don't assume $ANDROID_HOME is set.
+class ListAdbDevices : AbstractMcpTool<NoArgs>() {
+  override val name: String = "list_adb_devices"
+  override val description: String = """
+        Runs `adb devices` via the command line to show which Android devices (real or emulators) are currently running.
+        Important features and limitations:
+        - Checks if process is running before collecting output
+        - Limits output to $maxLineCount lines (truncates excess)
+        - Times out after $timeout milliseconds with notification
+        Returns possible responses:
+        - Terminal output (truncated if >$maxLineCount lines)
+        - Output with interruption notice if timed out
+        - Error messages for various failure cases
+    """
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("\$ANDROID_HOME/platform-tools/adb devices"),
+    )
+  }
+}
+
+// TODO - don't assume $ANDROID_HOME is set.
+class ListEmulators : AbstractMcpTool<NoArgs>() {
+  override val name: String = "list_emulators"
+  override val description: String = """
+        Runs `emulator -list-avds` via the command line to show which emulators are available to run.
+        Important features and limitations:
+        - Checks if process is running before collecting output
+        - Limits output to $maxLineCount lines (truncates excess)
+        - Times out after $timeout milliseconds with notification
+        Returns possible responses:
+        - Terminal output (truncated if >$maxLineCount lines)
+        - Output with interruption notice if timed out
+        - Error messages for various failure cases
+    """
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("\$ANDROID_HOME/emulator/emulator -list-avds"),
+    )
+  }
+}
+
+// TODO - don't assume $ANDROID_HOME is set.
+class RunEmulator : AbstractMcpTool<RunEmulator.Args>() {
+  override val name: String = "run_emulator"
+  override val description: String =
+    """
+      Runs `emulator -avds <avdName>` via the command line to run the emulator with the given name.
+
+      To see available emulators, use the list_emulators tool.
+    """
+      .trimIndent()
+
+  override fun handle(project: Project, args: Args): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("\$ANDROID_HOME/emulator/emulator -avd ${args.avdName}"),
+    )
+  }
+
+  @Serializable data class Args(val avdName: String)
+}
+
+class GitDiff : AbstractMcpTool<NoArgs>() {
+  override val name: String = "git_diff"
+  override val description: String = "Runs `git diff` from the command line."
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(project, ExecuteTerminalCommandArgs("git diff"))
+  }
+}
+
+class GitDiffTwoShas : AbstractMcpTool<GitDiffTwoShas.Args>() {
+  override val name: String = "git_diff_two_shas"
+  override val description: String = "Runs `git diff <sha1> <sha2>` from the command line."
+
+  override fun handle(project: Project, args: Args): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("git diff ${args.sha1} ${args.sha2}"),
+    )
+  }
+
+  @Serializable data class Args(val sha1: String, val sha2: String)
+}
+
+class GitLog : AbstractMcpTool<NoArgs>() {
+  override val name: String = "git_log"
+  override val description: String = "Runs `git --no-pager log -n 5` from the command line."
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(project, ExecuteTerminalCommandArgs("git --no-pager log -n 5"))
+  }
+}
+
+class GitAdd : AbstractMcpTool<NoArgs>() {
+  override val name: String = "git_add"
+  override val description: String = "Runs `git add .` from the command line."
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(project, ExecuteTerminalCommandArgs("git add ."))
+  }
+}
+
+class GitCommit : AbstractMcpTool<GitCommit.Args>() {
+  override val name: String = "git_commit"
+  override val description: String = "Runs `git commit -m <message>` from the command line."
+
+  override fun handle(project: Project, args: Args): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("git commit -m \"${args.message}\""),
+    )
+  }
+
+  @Serializable data class Args(val message: String)
+}
+
+class GitCheckout : AbstractMcpTool<GitCheckout.Args>() {
+  override val name: String = "git_checkout"
+  override val description: String = "Runs `git checkout <sha>` from the command line."
+
+  override fun handle(project: Project, args: Args): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(
+      project,
+      ExecuteTerminalCommandArgs("git checkout ${args.sha}"),
+    )
+  }
+
+  @Serializable data class Args(val sha: String)
+}
+
+class GitStash : AbstractMcpTool<NoArgs>() {
+  override val name: String = "git_stash"
+  override val description: String = "Runs `git stash` from the command line."
+
+  override fun handle(project: Project, args: NoArgs): Response {
+    val executeTerminalCommandTool = ExecuteTerminalCommandTool()
+    return executeTerminalCommandTool.handle(project, ExecuteTerminalCommandArgs("git stash"))
+  }
+}

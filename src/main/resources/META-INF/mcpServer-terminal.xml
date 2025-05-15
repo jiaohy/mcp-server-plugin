@@ -2,5 +2,18 @@
     <extensions defaultExtensionNs="com.intellij">
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GetTerminalTextTool"/>
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.ExecuteTerminalCommandTool"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.AssembleDebug"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitAdd"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitCheckout"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitCommit"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitDiff"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitDiffTwoShas"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitLog"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.GitStash"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.ListAdbDevices"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.ListEmulators"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.RunAndroidTestsForDebugVariants"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.RunEmulator"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.RunUnitTestsForDebugVariants"/>
     </extensions>
 </idea-plugin>
