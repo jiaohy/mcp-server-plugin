@@ -71,11 +71,22 @@ class ExecuteTerminalCommandTool : AbstractMcpTool<ExecuteTerminalCommandArgs>()
     }
 
     private fun formatOutput(output: String): String {
-        val lines = output.lines()
-        return if (lines.size > maxLineCount) {
-            lines.take(maxLineCount).joinToString("\n") + "\n... (output truncated at ${maxLineCount} lines)"
+        val lines = output.lines().map { it.trim() }.filter { it.isNotBlank() }
+        // Regex pattern to match common terminal prompts:
+        // Example: (base) user@host:path$ or user@host:path%
+        val promptRegex = Regex("""^.*[a-zA-Z0-9_.\-]+[:@].*\s?[#\$%>] (.*)""")
+        var latestPromptIndex = -1
+        for ((index, line) in lines.withIndex()) {
+            if (promptRegex.matches(line.trim()) && index != lines.lastIndex) {
+                latestPromptIndex = index
+            }
+        }
+
+        val resultLines = if (latestPromptIndex == -1) lines else lines.subList(latestPromptIndex, lines.lastIndex)
+        return if (resultLines.size > maxLineCount) {
+            resultLines.take(maxLineCount).joinToString("\n") + "\n... (output truncated at ${maxLineCount} resultLines)"
         } else {
-            output
+            resultLines.joinToString("\n")
         }
     }
 
@@ -146,7 +157,12 @@ class ExecuteTerminalCommandTool : AbstractMcpTool<ExecuteTerminalCommandArgs>()
                     formattedOutput
                 }
 
-                future.complete(Response(finalOutput))
+                if (finalOutput.contains("./gradlew assembleDebug") && finalOutput.contains("BUILD FAILED")) {
+                  // for assembleDebug tool, if the result is BUILD FAILED, set the response to error
+                  future.complete(Response(error = finalOutput))
+                } else {
+                  future.complete(Response(finalOutput))
+                }
             }
         }
 
