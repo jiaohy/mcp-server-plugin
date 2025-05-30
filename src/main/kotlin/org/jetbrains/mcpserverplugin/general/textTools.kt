@@ -339,6 +339,7 @@ class ReplaceSpecificTextTool : AbstractMcpTool<ReplaceSpecificTextArgs>() {
         WriteCommandAction.runWriteCommandAction(project) {
             document!!.setText(newText)
             FileDocumentManager.getInstance().saveDocument(document!!)
+            PsiDocumentManager.getInstance(project).commitDocument(document!!)
         }
 
         // Always return file errors after modification
@@ -397,6 +398,7 @@ class ReplaceTextByPathTool : AbstractMcpTool<ReplaceTextByPathToolArgs>() {
         WriteCommandAction.runWriteCommandAction(project) {
             document!!.setText(args.text)
             FileDocumentManager.getInstance().saveDocument(document!!)
+            PsiDocumentManager.getInstance(project).commitDocument(document!!)
         }
 
         // Always return file errors after modification
