@@ -54,7 +54,10 @@ fun Path.relativizeByProjectDir(projDir: Path?): String =
     projDir?.relativize(this)?.pathString ?: this.absolutePathString()
 
 @Serializable
-data class SearchInFilesArgs(val searchText: String)
+data class SearchInFilesArgs(
+    val searchText: String,
+    val fileGlob: String? = null // Optional glob pattern, e.g. "*.kt"
+)
 
 class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<SearchInFilesArgs>() {
     override val name: String = "search_in_files_content"
@@ -62,8 +65,12 @@ class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<S
         Searches for a text substring within all files in the project using IntelliJ's search engine.
         Use this tool to find files containing specific text content.
         Requires a searchText parameter specifying the text to find.
+        Optionally accepts a fileGlob parameter (e.g. "*.kt") to restrict search to matching files.
         Returns a JSON array of objects containing file information:
         - path: Path relative to project root
+        - name: File name
+        - line: Line number (1-based) where the match was found
+        - content: The content of the matching line
         Returns an empty array ([]) if no matches are found.
         Note: Only searches through text files within the project directory.
     """
@@ -73,8 +80,19 @@ class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<S
             ?: return Response(error = "Project directory not found")
 
         val searchSubstring = args.searchText
-        if (searchSubstring.isNullOrBlank()) {
-            return Response(error = "contentSubstring parameter is required and cannot be blank")
+        if (searchSubstring.isBlank()) {
+            return Response(error = "searchText parameter is required and cannot be blank")
+        }
+
+        // Prepare file filter if fileGlob is provided
+        val fileGlob = args.fileGlob
+        val fileRegex: Regex? = fileGlob?.let {
+            // Convert glob to regex
+            val regex = it
+                .replace(".", "\\.")
+                .replace("*", ".*")
+                .replace("?", ".")
+            Regex("^$regex$")
         }
 
         val findModel = FindManager.getInstance(project).findInProjectModel.clone()
@@ -88,10 +106,30 @@ class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<S
 
         val processor = Processor<UsageInfo> { usageInfo ->
             val virtualFile = usageInfo.virtualFile ?: return@Processor true
+            // Filter by fileGlob if provided
+            if (fileRegex != null && !fileRegex.matches(virtualFile.name)) {
+                return@Processor true
+            }
             try {
                 val relativePath = projectDir.relativize(Path(virtualFile.path)).toString()
-                results.add("""{"path": "$relativePath", "name": "${virtualFile.name}"}""")
-            } catch (e: IllegalArgumentException) {
+                val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(virtualFile)
+                val lineNumber = usageInfo.navigationOffset?.let { offset ->
+                    document?.getLineNumber(offset)
+                } ?: usageInfo.segment?.startOffset?.let { offset ->
+                    document?.getLineNumber(offset)
+                }
+                val lineNum = (lineNumber ?: 0) + 1 // 1-based
+                val lineContent = document?.let {
+                    if (lineNumber != null && lineNumber >= 0 && lineNumber < it.lineCount) {
+                        val start = it.getLineStartOffset(lineNumber)
+                        val end = it.getLineEndOffset(lineNumber)
+                        it.getText(com.intellij.openapi.util.TextRange(start, end)).replace("\"", "\\\"")
+                    } else ""
+                } ?: ""
+                results.add(
+                    """{"path": "$relativePath", "name": "${virtualFile.name}", "line": $lineNum, "content": "$lineContent"}"""
+                )
+            } catch (_: IllegalArgumentException) {
             }
             true
         }

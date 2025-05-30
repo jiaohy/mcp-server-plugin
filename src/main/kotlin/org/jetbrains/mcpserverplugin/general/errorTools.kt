@@ -25,13 +25,14 @@ import java.nio.file.Path
 class GetCurrentFileErrorsTool : AbstractMcpTool<NoArgs>() {
     override val name: String = "get_current_file_errors"
     override val description: String = """
-        Analyzes the currently open file in the editor for errors and warnings using IntelliJ's inspections.
-        Use this tool to identify coding issues, syntax errors, and other problems in your current file.
+        Analyzes the currently open file in the editor for errors using IntelliJ's inspections.
+        Use this tool to identify coding issues and syntax errors in your current file.
         Returns a JSON array of objects containing error information:
-        - severity: The severity level of the issue (ERROR, WARNING, etc.)
+        - severity: The severity level (only "ERROR")
         - description: A description of the issue
         - lineContent: The content of the line containing the issue
-        Returns an empty array ([]) if no issues are found.
+        - lineNumber: The 1-based line number of the error
+        Returns an empty array ([]) if no errors are found.
         Returns error if no file is currently open.
     """.trimIndent()
 
@@ -46,11 +47,8 @@ class GetCurrentFileErrorsTool : AbstractMcpTool<NoArgs>() {
                 val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document)
                     ?: return@runReadAction Response(error = "could not get PSI file")
 
-                val projectDir = project.guessProjectDir()?.toNioPathOrNull()
-                val filePath = psiFile.virtualFile?.toNioPathOrNull()?.relativizeByProjectDir(projectDir) ?: return@runReadAction Response(error = "could not get file path")
-
                 val highlightInfos = getHighlightInfos(project, psiFile, document)
-                val errorInfos = formatHighlightInfos(document, highlightInfos, filePath)
+                val errorInfos = formatErrorHighlightInfos(document, highlightInfos)
 
                 Response(errorInfos.joinToString(",\n", prefix = "[", postfix = "]"))
             } catch (e: Exception) {
@@ -61,14 +59,14 @@ class GetCurrentFileErrorsTool : AbstractMcpTool<NoArgs>() {
 
     private fun getHighlightInfos(project: Project, psiFile: PsiFile, document: Document): List<HighlightInfo> {
         val highlightInfos = mutableListOf<HighlightInfo>()
-        DaemonCodeAnalyzerEx.processHighlights(document, project, HighlightSeverity.WEAK_WARNING, 0, document.textLength) { highlightInfo ->
+        DaemonCodeAnalyzerEx.processHighlights(document, project, HighlightSeverity.ERROR, 0, document.textLength) { highlightInfo ->
             highlightInfos.add(highlightInfo)
             true
         }
         return highlightInfos
     }
 
-    private fun formatHighlightInfos(document: Document, highlightInfos: List<HighlightInfo>, filePath: String): List<String> {
+    private fun formatErrorHighlightInfos(document: Document, highlightInfos: List<HighlightInfo>): List<String> {
         return highlightInfos.map { info ->
             val startLine = document.getLineNumber(info.startOffset)
             val lineStartOffset = document.getLineStartOffset(startLine)
@@ -76,10 +74,10 @@ class GetCurrentFileErrorsTool : AbstractMcpTool<NoArgs>() {
             val lineContent = document.getText(TextRange(lineStartOffset, lineEndOffset))
             """
             {
-                "filePath": "${filePath}",
                 "severity": "${info.severity}",
                 "description": "${JsonUtils.escapeJson(info.description)}",
                 "lineContent": "${JsonUtils.escapeJson(lineContent)}",
+                "lineNumber": ${startLine + 1}
             }
             """.trimIndent()
         }
@@ -92,16 +90,16 @@ data class GetFileErrorsArgs(val pathInProject: String)
 class GetFileErrorsByPathTool : AbstractMcpTool<GetFileErrorsArgs>() {
     override val name: String = "get_file_errors_by_path"
     override val description: String = """
-        Analyzes the specified file (by project-relative path) for errors and warnings using IntelliJ's inspections.
-        Use this tool to identify coding issues, syntax errors, and other problems in any file in the project.
+        Analyzes the specified file (by project-relative path) for errors (not warnings) using IntelliJ's inspections.
+        Use this tool to identify coding issues and syntax errors in any file in the project.
         Parameters:
         - pathInProject: The path to the file, relative to the project root.
         Returns a JSON array of objects containing error information:
-        - filePath: The relative file path
-        - severity: The severity level of the issue (ERROR, WARNING, etc.)
+        - severity: The severity level (only "ERROR")
         - description: A description of the issue
         - lineContent: The content of the line containing the issue
-        Returns an empty array ([]) if no issues are found.
+        - lineNumber: The 1-based line number of the error
+        Returns an empty array ([]) if no errors are found.
         Returns error if the file is not found or cannot be analyzed.
     """.trimIndent()
 
@@ -121,10 +119,8 @@ class GetFileErrorsByPathTool : AbstractMcpTool<GetFileErrorsArgs>() {
                 val psiFile = com.intellij.psi.PsiManager.getInstance(project).findFile(vFile)
                     ?: return@runReadAction Response(error = "could not get PSI file")
 
-                val filePath = vFile.toNioPathOrNull()?.relativizeByProjectDir(projectDir) ?: args.pathInProject
-
                 val highlightInfos = getHighlightInfos(project, psiFile, document)
-                val errorInfos = formatHighlightInfos(document, highlightInfos, filePath)
+                val errorInfos = formatErrorHighlightInfos(document, highlightInfos)
 
                 Response(errorInfos.joinToString(",\n", prefix = "[", postfix = "]"))
             } catch (e: Exception) {
@@ -135,14 +131,14 @@ class GetFileErrorsByPathTool : AbstractMcpTool<GetFileErrorsArgs>() {
 
     private fun getHighlightInfos(project: Project, psiFile: PsiFile, document: Document): List<HighlightInfo> {
         val highlightInfos = mutableListOf<HighlightInfo>()
-        DaemonCodeAnalyzerEx.processHighlights(document, project, HighlightSeverity.WEAK_WARNING, 0, document.textLength) { highlightInfo ->
+        DaemonCodeAnalyzerEx.processHighlights(document, project, HighlightSeverity.ERROR, 0, document.textLength) { highlightInfo ->
             highlightInfos.add(highlightInfo)
             true
         }
         return highlightInfos
     }
 
-    private fun formatHighlightInfos(document: Document, highlightInfos: List<HighlightInfo>, filePath: String): List<String> {
+    private fun formatErrorHighlightInfos(document: Document, highlightInfos: List<HighlightInfo>): List<String> {
         return highlightInfos.map { info ->
             val startLine = document.getLineNumber(info.startOffset)
             val lineStartOffset = document.getLineStartOffset(startLine)
@@ -150,10 +146,10 @@ class GetFileErrorsByPathTool : AbstractMcpTool<GetFileErrorsArgs>() {
             val lineContent = document.getText(TextRange(lineStartOffset, lineEndOffset))
             """
             {
-                "filePath": "${filePath}",
                 "severity": "${info.severity}",
                 "description": "${JsonUtils.escapeJson(info.description)}",
-                "lineContent": "${JsonUtils.escapeJson(lineContent)}"
+                "lineContent": "${JsonUtils.escapeJson(lineContent)}",
+                "lineNumber": ${startLine + 1}
             }
             """.trimIndent()
         }

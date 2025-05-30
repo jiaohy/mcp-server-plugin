@@ -19,6 +19,8 @@ import org.jetbrains.mcpserverplugin.general.relativizeByProjectDir
 import org.jetbrains.mcpserverplugin.general.resolveRel
 import java.nio.file.Path
 import kotlin.io.path.*
+import org.jetbrains.mcpserverplugin.general.GetFileErrorsArgs
+import org.jetbrains.mcpserverplugin.general.GetFileErrorsByPathTool
 
 
 @Serializable
@@ -205,7 +207,8 @@ class CreateNewFileWithTextTool : AbstractMcpTool<CreateNewFileWithTextArgs>() {
             - "ok" if the file was successfully created and populated
             - "can't find project dir" if the project directory cannot be determined
         Note: Creates any necessary parent directories automatically
-    """
+        Additionally, always returns the file's error/warning info after creation.
+    """.trimIndent()
 
     override fun handle(project: Project, args: CreateNewFileWithTextArgs): Response {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
@@ -219,7 +222,9 @@ class CreateNewFileWithTextTool : AbstractMcpTool<CreateNewFileWithTextArgs>() {
         path.writeText(text.unescape())
         LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
 
-        return Response("ok")
+        // Always return file errors after creation
+        val errorTool = GetFileErrorsByPathTool()
+        return errorTool.handle(project, GetFileErrorsArgs(args.pathInProject))
     }
 
     private fun String.unescape(): String = removePrefix("<![CDATA[").removeSuffix("]]>")
