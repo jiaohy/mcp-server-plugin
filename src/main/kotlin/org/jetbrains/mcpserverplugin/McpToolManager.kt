@@ -22,7 +22,7 @@ import org.jetbrains.mcpserverplugin.general.ListDirectoryTreeInFolderTool
 import org.jetbrains.mcpserverplugin.general.ListFilesInFolderTool
 import org.jetbrains.mcpserverplugin.general.OpenFileInEditorTool
 // import org.jetbrains.mcpserverplugin.general.ReplaceCurrentFileTextTool
-import org.jetbrains.mcpserverplugin.general.GetFileLineRangeArgsTool
+import org.jetbrains.mcpserverplugin.general.GetFileLineRangeTool
 import org.jetbrains.mcpserverplugin.general.ReplaceSelectedTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceSpecificTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceTextByPathTool
@@ -52,7 +52,7 @@ class McpToolManager {
             GetSelectedTextTool(),
             ReplaceSelectedTextTool(),
             // ReplaceCurrentFileTextTool(),
-            GetFileLineRangeArgsTool(),
+            GetFileLineRangeTool(),
             CreateNewFileWithTextTool(),
             FindFilesByNameSubstring(),
             GetFileTextByPathTool(),

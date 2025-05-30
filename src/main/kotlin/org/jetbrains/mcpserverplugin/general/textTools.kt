@@ -22,7 +22,8 @@ import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
 import org.jetbrains.mcpserverplugin.general.relativizeByProjectDir
 import org.jetbrains.mcpserverplugin.general.resolveRel
-import kotlin.text.replace
+import org.jetbrains.mcpserverplugin.general.errorTools.GetFileErrorsArgs
+import org.jetbrains.mcpserverplugin.general.errorTools.GetFileErrorsByPathTool
 
 class GetCurrentFileTextTool : AbstractMcpTool<NoArgs>() {
     override val name: String = "get_open_in_editor_file_text"
@@ -200,8 +201,8 @@ class GetFileTextByPathTool : AbstractMcpTool<PathInProject>() {
 @Serializable
 data class GetFileLineRangeArgs(
     val pathInProject: String,
-    val fromLine: Int? = null, // 1-based, inclusive
-    val toLine: Int? = null,   // 1-based, inclusive
+    val fromLine: Int? = 1, // 1-based, inclusive
+    val numLines: Int? = null,   // 1-based, inclusive
     val withLineNumbers: Boolean = false
 )
 
@@ -211,8 +212,8 @@ class GetFileLineRangeTool : AbstractMcpTool<GetFileLineRangeArgs>() {
         Retrieves a specific line range from a file using its path relative to the project root.
         Parameters:
         - pathInProject: Path to the file, relative to project root (required)
-        - fromLine: Start line number (1-based, inclusive, optional)
-        - toLine: End line number (1-based, inclusive, optional)
+        - fromLine: Start line number (1-based, inclusive, optional). If not provided, defaults to 1.
+        - numLines: Number of lines to retrieve (optional, if not provided, retrieves until the end of the file)
         - withLineNumbers: If true, prefixes each line with its line number (default: false)
         Returns:
         - JSON object: {"path": "<relative_path>", "text": "<file_content>"}
@@ -237,7 +238,11 @@ class GetFileLineRangeTool : AbstractMcpTool<GetFileLineRangeArgs>() {
 
             val allLines = file.readText().lines()
             val from = args.fromLine?.coerceAtLeast(1) ?: 1
-            val to = args.toLine?.coerceAtMost(allLines.size) ?: allLines.size
+            val to = if (args.numLines != null) {
+                (from + args.numLines - 1).coerceAtMost(allLines.size)
+            } else {
+                allLines.size
+            }
 
             if (from > to || from > allLines.size) {
                 return@runReadAction Response(error = "invalid line range")
@@ -274,19 +279,19 @@ class ReplaceSpecificTextTool : AbstractMcpTool<ReplaceSpecificTextArgs>() {
         - error "file not found" if the file doesn't exist
         - error "could not get document" if the file content cannot be accessed
         - error "no occurrences found" if the old text was not found in the file
-        - error "empty oldText or newText not allowed"
-        - error "replacement would double file size"
+        - error "empty oldText not allowed"
         - error "replacement would drastically change line count"
         Note: Automatically saves the file after modification
+        Additionally, always returns the file's error/warning info after modification.
     """.trimIndent()
 
     override fun handle(project: Project, args: ReplaceSpecificTextArgs): Response {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
             ?: return Response(error = "project dir not found")
 
-        // Check for empty oldText or newText
-        if (args.oldText.isBlank() || args.newText.isBlank()) {
-            return Response(error = "empty oldText or newText not allowed")
+        // Check for empty oldText
+        if (args.oldText.isBlank()) {
+            return Response(error = "empty oldText not allowed")
         }
 
         var document: Document? = null
@@ -336,8 +341,9 @@ class ReplaceSpecificTextTool : AbstractMcpTool<ReplaceSpecificTextArgs>() {
             FileDocumentManager.getInstance().saveDocument(document!!)
         }
 
-        // Return new file content in response
-        return Response("""{"path": "${args.pathInProject}", "text": "${newText.replace("\"", "\\\"").replace("\n", "\\n")}"}""")
+        // Always return file errors after modification
+        val errorTool = GetFileErrorsByPathTool()
+        return errorTool.handle(project, GetFileErrorsArgs(args.pathInProject))
     }
 }
 
@@ -358,7 +364,8 @@ class ReplaceTextByPathTool : AbstractMcpTool<ReplaceTextByPathToolArgs>() {
         - error "file not found" if the file doesn't exist
         - error "could not get document" if the file content cannot be accessed
         Note: Automatically saves the file after modification
-    """
+        Additionally, always returns the file's error/warning info after modification.
+    """.trimIndent()
 
     override fun handle(project: Project, args: ReplaceTextByPathToolArgs): Response {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
@@ -392,6 +399,8 @@ class ReplaceTextByPathTool : AbstractMcpTool<ReplaceTextByPathToolArgs>() {
             FileDocumentManager.getInstance().saveDocument(document!!)
         }
 
-        return Response("ok")
+        // Always return file errors after modification
+        val errorTool = GetFileErrorsByPathTool()
+        return errorTool.handle(project, GetFileErrorsArgs(args.pathInProject))
     }
 }
