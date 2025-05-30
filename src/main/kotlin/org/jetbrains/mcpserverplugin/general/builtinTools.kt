@@ -177,14 +177,15 @@ class RunTool : AbstractMcpTool<RunConfigArgs>() {
     override val description: String =
         "Runs a specific run configuration in the current project, defaulting to 'app' if none is provided. " +
         "Use this tool with configurations listed by the \"get_run_configurations\" tool. " +
-        "It waits up to 2 seconds for the run to start and returns an error if the configuration is not found, fails to start, or exits with a non-zero code. " +
+        "It waits up to 10 seconds for the run to start and returns an error if the configuration is not found, fails to start, or exits with a non-zero code. " +
         "Note: This tool does not currently capture or return output from the run. " +
         "If it times out without an error, the app may have launched successfully. " +
-        "If you see a 'No runner available' error, verify the configuration and try syncing your Gradle project."
+        "If you see a 'No runner available' error, verify the configuration and try syncing your Gradle project." +
+        "This tool has bugs and may not work correctly in all cases. "
 
 
     // Timeout in seconds
-    private val executionTimeoutSeconds = 2L
+    val executionTimeoutSeconds = 10L
 
     override fun handle(project: Project, args: RunConfigArgs): Response {
         val runManager = RunManager.getInstance(project)
@@ -386,19 +387,19 @@ class ExecuteActionByIdTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<Exec
     }
 }
 
-class RunAppTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
-    override val name: String = "run_app"
-    override val description: String = """
-    Runs the main application in the current project.
-    This tool executes the "Run" action, which typically starts the main application configured in the project.
-    Requires no parameters.
-    Returns "ok" if the action was successfully executed.
-    Note: This tool does not wait for the application to finish running.
-    """.trimIndent()
-    override fun handle(project: Project, args: NoArgs): Response {
-        return ExecuteActionByIdTool().handle(project, ExecuteActionArgs(actionId = "Run"))
-    }
-}
+// class RunAppTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
+//     override val name: String = "run_app"
+//     override val description: String = """
+//     Runs the main application in the current project.
+//     This tool executes the "Run" action, which typically starts the main application configured in the project.
+//     Requires no parameters.
+//     Returns "ok" if the action was successfully executed.
+//     Note: This tool does not wait for the application to finish running.
+//     """.trimIndent()
+//     override fun handle(project: Project, args: NoArgs): Response {
+//         return ExecuteActionByIdTool().handle(project, ExecuteActionArgs(actionId = "Run"))
+//     }
+// }
 
 
 class GetProgressIndicatorsTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
