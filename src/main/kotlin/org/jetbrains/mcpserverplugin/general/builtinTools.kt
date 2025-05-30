@@ -130,18 +130,23 @@ class GetRunConfigurationsTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<N
 }
 
 @Serializable
-data class RunConfigArgs(val configName: String)
+data class RunConfigArgs(val configName: String = "app")
 
-class RunConfigurationTool : AbstractMcpTool<RunConfigArgs>() {
-    override val name: String = "run_configuration"
+// TODO(krishansubudhi): Not returning output for now — debug later if needed
+
+class RunTool : AbstractMcpTool<RunConfigArgs>() {
+    override val name: String = "run_app"
     override val description: String =
-        "Run a specific run configuration in the current project and wait up to 120 seconds for it to finish. " +
-                "Use this tool to run a run configuration that you have found from the \"get_run_configurations\" tool. " +
-                "Returns the output (stdout/stderr) of the execution, prefixed with 'ok\\n' on success (exit code 0). " +
-                "Returns '<error message>' if the configuration is not found, times out, fails to start, or finishes with a non-zero exit code."
+        "Runs a specific run configuration in the current project, defaulting to 'app' if none is provided. " +
+        "Use this tool with configurations listed by the \"get_run_configurations\" tool. " +
+        "It waits up to 2 seconds for the run to start and returns an error if the configuration is not found, fails to start, or exits with a non-zero code. " +
+        "Note: This tool does not currently capture or return output from the run. " +
+        "If it times out without an error, the app may have launched successfully. " +
+        "If you see a 'No runner available' error, verify the configuration and try syncing your Gradle project."
+
 
     // Timeout in seconds
-    private val executionTimeoutSeconds = 120L
+    private val executionTimeoutSeconds = 2L
 
     override fun handle(project: Project, args: RunConfigArgs): Response {
         val runManager = RunManager.getInstance(project)
@@ -164,7 +169,7 @@ class RunConfigurationTool : AbstractMcpTool<RunConfigArgs>() {
                     return@invokeLater
                 }
 
-                val environment = ExecutionEnvironmentBuilder.create(project, executor, settings.configuration).build()
+                val environment = ExecutionEnvironmentBuilder.create(executor, settings).build()
 
                 val callback = object : ProgramRunner.Callback {
                     override fun processStarted(descriptor: RunContentDescriptor?) {
@@ -230,7 +235,7 @@ class RunConfigurationTool : AbstractMcpTool<RunConfigArgs>() {
                 Response(error = "Execution failed with exit code $exitCode.\nOutput:\n$output")
             }
         } catch (e: TimeoutException) {
-            return Response(error = "Execution timed out after $executionTimeoutSeconds seconds.")
+            return Response("Timed out without error. But can not guarantee that the run configuration was executed successfully. ")
         } catch (e: ExecutionException) {
             val causeMessage = e.cause?.message ?: e.message
             return Response(error = "Failed to execute run configuration: $causeMessage")
@@ -342,6 +347,21 @@ class ExecuteActionByIdTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<Exec
         return Response("ok")
     }
 }
+
+class RunAppTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
+    override val name: String = "run_app"
+    override val description: String = """
+    Runs the main application in the current project.
+    This tool executes the "Run" action, which typically starts the main application configured in the project.
+    Requires no parameters.
+    Returns "ok" if the action was successfully executed.
+    Note: This tool does not wait for the application to finish running.
+    """.trimIndent()
+    override fun handle(project: Project, args: NoArgs): Response {
+        return ExecuteActionByIdTool().handle(project, ExecuteActionArgs(actionId = "Run"))
+    }
+}
+
 
 class GetProgressIndicatorsTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
     override val name: String = "get_progress_indicators"

@@ -24,7 +24,7 @@ import org.jetbrains.mcpserverplugin.general.ReplaceCurrentFileTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceSelectedTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceSpecificTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceTextByPathTool
-import org.jetbrains.mcpserverplugin.general.RunConfigurationTool
+import org.jetbrains.mcpserverplugin.general.RunTool
 import org.jetbrains.mcpserverplugin.general.SearchInFilesContentTool
 import org.jetbrains.mcpserverplugin.general.WaitTool
 import org.jetbrains.mcpserverplugin.git.GetVcsStatusTool
@@ -61,7 +61,7 @@ class McpToolManager {
             ListFilesInFolderTool(),
             ListDirectoryTreeInFolderTool(),
             SearchInFilesContentTool(),
-            RunConfigurationTool(),
+            RunTool(),
             GetRunConfigurationsTool(),
             GetProjectModulesTool(),
             GetProjectDependenciesTool(),
