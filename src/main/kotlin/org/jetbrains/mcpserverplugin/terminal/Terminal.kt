@@ -561,50 +561,39 @@ class EnsureEmulatorReady : AbstractMcpTool<EnsureEmulatorReadyArgs>() {
 
     override fun handle(project: Project, args: EnsureEmulatorReadyArgs): Response {
         val cmd = """
-            # Check if any emulator/device is already connected
-            if adb devices | grep -v 'List' | grep -q 'device$'; then
-                echo "Device already connected"
-                exit 0
-            fi
-
-            # Try to start emulator
-            echo "No device found. Attempting to start emulator '${args.emulatorName}'..."
-
-            if [ -n "${'$'}ANDROID_HOME" ]; then
-                nohup "${'$'}ANDROID_HOME/emulator/emulator" -avd "${args.emulatorName}" > /dev/null 2>&1 & disown
+            if [ -n "\${'$'}ANDROID_HOME" ]; then
+                nohup "\${'$'}ANDROID_HOME/emulator/emulator" -avd "${args.emulatorName}" > /dev/null 2>&1 & disown
             elif [ -f ~/Library/Android/sdk/emulator/emulator ]; then
                 nohup ~/Library/Android/sdk/emulator/emulator -avd "${args.emulatorName}" > /dev/null 2>&1 & disown
             else
-                echo "Android emulator not found. Set ANDROID_HOME or install SDK."
+                echo "Android emulator not found"
                 exit 1
             fi
 
-            # Wait for boot
-            echo "Waiting for emulator to boot..."
-            adb wait-for-device
-
             timeout=${args.timeoutSeconds}
             waited=0
-            while [ "$waited" -lt "$timeout" ]; do
-                boot_status=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-                if [ "$boot_status" = "1" ]; then
-                    echo "Emulator boot completed"
+            while [ "\${'$'}waited" -lt "\${'$'}timeout" ]; do
+                boot_status=\$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+                if [ "\${'$'}boot_status" = "1" ]; then
+                    echo "Boot completed"
                     exit 0
                 fi
                 sleep 5
-                waited=$((waited + 5))
+                waited=\$((waited + 5))
             done
-
-            echo "Timed out waiting for emulator to boot."
+            echo "Timed out"
             exit 1
         """.trimIndent()
 
         return ExecuteTerminalCommandTool().handle(
             project,
-            ExecuteTerminalCommandArgs(cmd)
+            ExecuteTerminalCommandArgs(
+                "bash -c '${cmd.replace("'", "'\\''")}'"
+            )
         )
     }
 }
+
 
 // =============================================================================
 // DEBUGGING AND ANALYSIS TOOLS

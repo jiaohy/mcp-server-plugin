@@ -22,8 +22,8 @@ import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
 import org.jetbrains.mcpserverplugin.general.relativizeByProjectDir
 import org.jetbrains.mcpserverplugin.general.resolveRel
-import org.jetbrains.mcpserverplugin.general.errorTools.GetFileErrorsArgs
-import org.jetbrains.mcpserverplugin.general.errorTools.GetFileErrorsByPathTool
+import org.jetbrains.mcpserverplugin.general.GetFileErrorsArgs
+import org.jetbrains.mcpserverplugin.general.GetFileErrorsByPathTool
 
 class GetCurrentFileTextTool : AbstractMcpTool<NoArgs>() {
     override val name: String = "get_open_in_editor_file_text"
