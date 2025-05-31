@@ -1,5 +1,6 @@
 package org.jetbrains.mcpserverplugin.terminal
 
+import java.io.File
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -211,36 +212,68 @@ class CheckCodeQuality : AbstractMcpTool<NoArgs>() {
     }
 }
 
+@Serializable
+data class CheckFileLintArgs(val pathInProject: String)
+
+class CheckLintForFile : AbstractMcpTool<CheckFileLintArgs>() {
+    override val name: String = "check_lint_for_file"
+    override val description: String = """
+        Runs Android Lint via `./gradlew lintDebug`, then extracts issues related to the specified file.
+        Use this after making changes to validate the affected file.
+    """.trimIndent()
+
+    override fun handle(project: Project, args: CheckFileLintArgs): Response {
+        val process = ProcessBuilder("./gradlew", "lintDebug")
+            .directory(File(project.basePath))
+            .redirectErrorStream(true)
+            .start()
+
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor(60, TimeUnit.SECONDS)
+
+        // Grep-like filtering
+        val matches = output.lines()
+            .filter { it.contains(args.pathInProject) }
+
+        return if (matches.isEmpty()) {
+            Response("No lint issues found in ${args.pathInProject}")
+        } else {
+            Response(matches.joinToString("\n"))
+        }
+    }
+}
+
 class ValidateProjectQuickly : AbstractMcpTool<NoArgs>() {
     override val name: String = "validate_project_structure"
     override val description: String = """
-        **FAST** multi-check validation (10-15 seconds) that verifies:
-        - Gradle configuration is valid
-        - Project structure is correct  
-        - Dependencies can be resolved
-        - Basic syntax check passes
-        **USE THIS** when setting up project or after major changes to catch multiple issues quickly.
-        AI Agent: Use this tool after making project-level changes or when debugging build issues.
-    """
-    
+        **FAST** project-level validation to check:
+        - Gradle setup
+        - Basic build graph integrity
+        - Project structure sanity
+        - Dependency resolution
+
+        Use this when setting up a project, switching branches, or debugging build config issues.
+    """.trimIndent()
+
     override fun handle(project: Project, args: NoArgs): Response {
         val executeTerminalCommandTool = ExecuteTerminalCommandTool()
         return executeTerminalCommandTool.handle(
             project,
             ExecuteTerminalCommandArgs("""
-                echo "=== Gradle Wrapper Check ===" &&
+                echo "=== Gradle Version ===" &&
                 ./gradlew --version &&
-                echo "=== Project Structure Check ===" &&
-                ls -la app/src/main/ &&
-                echo "=== Quick Syntax Check ===" &&
-                ./gradlew compileDebugKotlin --dry-run &&
+                echo "=== Source Structure Check ===" &&
+                [ -d app/src/main ] && ls -la app/src/main || ls -la src/main || echo "Main source folder not found" &&
+                echo "=== Gradle Task Graph Check ===" &&
+                ./gradlew tasks --dry-run &&
                 echo "=== Dependency Check ===" &&
-                ./gradlew dependencies --quiet | head -20 &&
+                ./gradlew dependencies --configuration implementation --quiet &&
                 echo "=== Validation Complete ==="
             """.trimIndent())
         )
     }
 }
+
 
 
 
@@ -357,22 +390,17 @@ class RunAndroidTests : AbstractMcpTool<RunAndroidTestArgs>() {
 class SyncGradleProject : AbstractMcpTool<NoArgs>() {
     override val name: String = "sync_gradle_project"
     override val description: String = """
-        **MODERATE** Gradle project sync (15-45 seconds) to refresh dependencies and project configuration.
-        **USE THIS** after making changes to build.gradle files, adding new dependencies, or when project structure changes.
-        Syncs project with Gradle files, downloads new dependencies, and updates IDE project structure.
-        Essential after:
-        - Adding new dependencies to build.gradle
-        - Changing Gradle configuration
-        - Switching branches with different dependencies
-        - Project setup or major structural changes
-        AI Agent: Use this tool when build errors suggest dependency or configuration issues.
-    """
-    
+        **MODERATE** Gradle project sync (~15-45 seconds) to refresh dependencies and build configuration.
+        Use this after editing `build.gradle` files, adding new dependencies, or switching branches.
+        Executes `./gradlew --refresh-dependencies tasks` to force dependency resolution.
+        Note: Does not recompile code or run tests.
+    """.trimIndent()
+
     override fun handle(project: Project, args: NoArgs): Response {
         val executeTerminalCommandTool = ExecuteTerminalCommandTool()
         return executeTerminalCommandTool.handle(
             project,
-            ExecuteTerminalCommandArgs("./gradlew --refresh-dependencies build --dry-run")
+            ExecuteTerminalCommandArgs("./gradlew --refresh-dependencies tasks")
         )
     }
 }
@@ -555,44 +583,53 @@ data class EnsureEmulatorReadyArgs(
 class EnsureEmulatorReady : AbstractMcpTool<EnsureEmulatorReadyArgs>() {
     override val name: String = "ensure_emulator_ready"
     override val description: String = """
-        Starts emulator if no connected device is found and waits until it's fully booted.
-        Uses `adb devices`, `emulator -avd`, and waits for `sys.boot_completed`.
+        Starts the specified emulator if no device is connected and waits until it is fully booted.
+        Uses `adb shell getprop sys.boot_completed` to check readiness.
     """.trimIndent()
 
     override fun handle(project: Project, args: EnsureEmulatorReadyArgs): Response {
-        val cmd = """
-            if [ -n "\${'$'}ANDROID_HOME" ]; then
-                nohup "\${'$'}ANDROID_HOME/emulator/emulator" -avd "${args.emulatorName}" > /dev/null 2>&1 & disown
-            elif [ -f ~/Library/Android/sdk/emulator/emulator ]; then
-                nohup ~/Library/Android/sdk/emulator/emulator -avd "${args.emulatorName}" > /dev/null 2>&1 & disown
+        val timeoutSeconds = args.timeoutSeconds
+        val emulatorName = args.emulatorName
+
+        val script = """
+            if [ -n "${'$'}ANDROID_HOME" ]; then
+                EMULATOR="${'$'}ANDROID_HOME/emulator/emulator"
+            elif [ -f "${'$'}HOME/Library/Android/sdk/emulator/emulator" ]; then
+                EMULATOR="${'$'}HOME/Library/Android/sdk/emulator/emulator"
             else
                 echo "Android emulator not found"
                 exit 1
             fi
 
-            timeout=${args.timeoutSeconds}
+            echo "Starting emulator: $emulatorName"
+            nohup "${'$'}EMULATOR" -avd "$emulatorName" > /dev/null 2>&1 & disown
+
+            echo "Waiting for emulator to boot..."
             waited=0
-            while [ "\${'$'}waited" -lt "\${'$'}timeout" ]; do
-                boot_status=\$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-                if [ "\${'$'}boot_status" = "1" ]; then
-                    echo "Boot completed"
+            while [ "${'$'}waited" -lt "$timeoutSeconds" ]; do
+                boot_status=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+                if [ "${'$'}boot_status" = "1" ]; then
+                    echo "Emulator boot completed."
                     exit 0
                 fi
                 sleep 5
-                waited=\$((waited + 5))
+                waited=$((waited + 5))
+                echo "Still waiting... (${ '$' }waited/${ '$' }timeoutSeconds)"
             done
-            echo "Timed out"
+
+            echo "Emulator timed out."
             exit 1
         """.trimIndent()
 
+        val escaped = script.replace("'", "'\\''")
+
         return ExecuteTerminalCommandTool().handle(
             project,
-            ExecuteTerminalCommandArgs(
-                "bash -c '${cmd.replace("'", "'\\''")}'"
-            )
+            ExecuteTerminalCommandArgs("bash -c '$escaped'")
         )
     }
 }
+
 
 
 // =============================================================================

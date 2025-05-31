@@ -22,8 +22,6 @@ import org.jetbrains.ide.mcp.Response
 import org.jetbrains.mcpserverplugin.AbstractMcpTool
 import org.jetbrains.mcpserverplugin.general.relativizeByProjectDir
 import org.jetbrains.mcpserverplugin.general.resolveRel
-import org.jetbrains.mcpserverplugin.general.GetFileErrorsArgs
-import org.jetbrains.mcpserverplugin.general.GetFileErrorsByPathTool
 
 class GetCurrentFileTextTool : AbstractMcpTool<NoArgs>() {
     override val name: String = "get_open_in_editor_file_text"
@@ -166,50 +164,20 @@ class ReplaceSelectedTextTool : AbstractMcpTool<ReplaceSelectedTextArgs>() {
 @Serializable
 data class PathInProject(val pathInProject: String)
 
-class GetFileTextByPathTool : AbstractMcpTool<PathInProject>() {
-    override val name: String = "get_file_text_by_path"
-    override val description: String = """
-        Retrieves the text content of a file using its path relative to project root.
-        Use this tool to read file contents when you have the file's project-relative path.
-        Requires a pathInProject parameter specifying the file location from project root.
-        Returns one of these responses:
-        - The file's content if the file exists and belongs to the project
-        - error "project dir not found" if project directory cannot be determined
-        - error "file not found" if the file doesn't exist or is outside project scope
-        Note: Automatically refreshes the file system before reading
-    """
-
-    override fun handle(project: Project, args: PathInProject): Response {
-        val projectDir = project.guessProjectDir()?.toNioPathOrNull()
-            ?: return Response(error = "project dir not found")
-
-        val text = runReadAction {
-            val file = LocalFileSystem.getInstance()
-                .refreshAndFindFileByNioFile(projectDir.resolveRel(args.pathInProject))
-                ?: return@runReadAction Response(error = "file not found")
-
-            if (GlobalSearchScope.allScope(project).contains(file)) {
-                Response(file.readText())
-            } else {
-                Response(error = "file not found")
-            }
-        }
-        return text
-    }
-}
 
 @Serializable
-data class GetFileLineRangeArgs(
+data class GetFileTextByPathArgs(
     val pathInProject: String,
     val fromLine: Int? = 1, // 1-based, inclusive
     val numLines: Int? = null,   // 1-based, inclusive
     val withLineNumbers: Boolean = false
 )
 
-class GetFileLineRangeTool : AbstractMcpTool<GetFileLineRangeArgs>() {
-    override val name: String = "get_file_line_range"
+class GetFileTextByPathTool : AbstractMcpTool<GetFileTextByPathArgs>() {
+    override val name: String = "get_file_text_by_path"
     override val description: String = """
-        Retrieves a specific line range from a file using its path relative to the project root.
+        Retrieves the  text content of a file using its path relative to the project root.
+        Use this tool to access and analyze file contents by specifying a path.
         Parameters:
         - pathInProject: Path to the file, relative to project root (required)
         - fromLine: Start line number (1-based, inclusive, optional). If not provided, defaults to 1.
@@ -223,7 +191,7 @@ class GetFileLineRangeTool : AbstractMcpTool<GetFileLineRangeArgs>() {
         Note: Automatically refreshes the file system before reading.
     """.trimIndent()
 
-    override fun handle(project: Project, args: GetFileLineRangeArgs): Response {
+    override fun handle(project: Project, args: GetFileTextByPathArgs): Response {
         val projectDir = project.guessProjectDir()?.toNioPathOrNull()
             ?: return Response(error = "project dir not found")
 
@@ -339,12 +307,10 @@ class ReplaceSpecificTextTool : AbstractMcpTool<ReplaceSpecificTextArgs>() {
         WriteCommandAction.runWriteCommandAction(project) {
             document!!.setText(newText)
             FileDocumentManager.getInstance().saveDocument(document!!)
-            PsiDocumentManager.getInstance(project).commitDocument(document!!)
         }
 
-        // Always return file errors after modification
-        val errorTool = GetFileErrorsByPathTool()
-        return errorTool.handle(project, GetFileErrorsArgs(args.pathInProject))
+        return Response("ok")
+
     }
 }
 
@@ -398,11 +364,7 @@ class ReplaceTextByPathTool : AbstractMcpTool<ReplaceTextByPathToolArgs>() {
         WriteCommandAction.runWriteCommandAction(project) {
             document!!.setText(args.text)
             FileDocumentManager.getInstance().saveDocument(document!!)
-            PsiDocumentManager.getInstance(project).commitDocument(document!!)
         }
-
-        // Always return file errors after modification
-        val errorTool = GetFileErrorsByPathTool()
-        return errorTool.handle(project, GetFileErrorsArgs(args.pathInProject))
+        return Response("ok")
     }
 }

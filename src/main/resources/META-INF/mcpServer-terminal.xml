@@ -4,6 +4,7 @@
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.ExecuteTerminalCommandTool"/>
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.QuickCompileCheck"/>
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.CheckCodeQuality"/>
+        <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.CheckLintForFile"/>
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.ValidateProjectQuickly"/>
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.RefreshDependencies"/>
         <mcpServer.mcpTool implementation="org.jetbrains.mcpserverplugin.terminal.ValidateGradleConfiguration"/>

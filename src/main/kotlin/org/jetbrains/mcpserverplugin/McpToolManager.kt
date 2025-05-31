@@ -7,7 +7,6 @@ import org.jetbrains.mcpserverplugin.general.FindFilesByNameSubstring
 import org.jetbrains.mcpserverplugin.general.GetAllOpenFilePathsTool
 import org.jetbrains.mcpserverplugin.general.GetAllOpenFileTextsTool
 import org.jetbrains.mcpserverplugin.general.GetCurrentFileErrorsTool
-import org.jetbrains.mcpserverplugin.general.GetFileErrorsByPathTool
 import org.jetbrains.mcpserverplugin.general.GetCurrentFilePathTool
 import org.jetbrains.mcpserverplugin.general.GetCurrentFileTextTool
 import org.jetbrains.mcpserverplugin.general.GetFileTextByPathTool
@@ -21,8 +20,6 @@ import org.jetbrains.mcpserverplugin.general.ListAvailableActionsTool
 import org.jetbrains.mcpserverplugin.general.ListDirectoryTreeInFolderTool
 import org.jetbrains.mcpserverplugin.general.ListFilesInFolderTool
 import org.jetbrains.mcpserverplugin.general.OpenFileInEditorTool
-// import org.jetbrains.mcpserverplugin.general.ReplaceCurrentFileTextTool
-import org.jetbrains.mcpserverplugin.general.GetFileLineRangeTool
 import org.jetbrains.mcpserverplugin.general.ReplaceSelectedTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceSpecificTextTool
 import org.jetbrains.mcpserverplugin.general.ReplaceTextByPathTool
@@ -51,8 +48,6 @@ class McpToolManager {
             GetCurrentFilePathTool(),
             GetSelectedTextTool(),
             ReplaceSelectedTextTool(),
-            // ReplaceCurrentFileTextTool(),
-            GetFileLineRangeTool(),
             CreateNewFileWithTextTool(),
             FindFilesByNameSubstring(),
             GetFileTextByPathTool(),
@@ -76,7 +71,6 @@ class McpToolManager {
             GetProgressIndicatorsTool(),
             WaitTool(),
             GetCurrentFileErrorsTool(),
-            GetFileErrorsByPathTool(),
             ReformatCurrentFileTool(),
             ReformatFileTool(),
             GetProblemsTools(),

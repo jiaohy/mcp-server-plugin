@@ -1,5 +1,6 @@
 package org.jetbrains.mcpserverplugin.general
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.invokeLater
 import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.editor.Document
@@ -22,9 +23,7 @@ import org.jetbrains.mcpserverplugin.general.relativizeByProjectDir
 import org.jetbrains.mcpserverplugin.general.resolveRel
 import java.nio.file.Path
 import kotlin.io.path.*
-import org.jetbrains.mcpserverplugin.general.GetFileErrorsArgs
-import org.jetbrains.mcpserverplugin.general.GetFileErrorsByPathTool
-
+import com.intellij.openapi.command.WriteCommandAction
 
 @Serializable
 data class ListDirectoryTreeInFolderArgs(val pathInProject: String, val maxDepth: Int = 5)
@@ -206,11 +205,9 @@ class CreateNewFileWithTextTool : AbstractMcpTool<CreateNewFileWithTextArgs>() {
         Requires two parameters:
             - pathInProject: The relative path where the file should be created
             - text: The content to write into the new file
-        Returns one of two possible responses:
-            - "ok" if the file was successfully created and populated
-            - "can't find project dir" if the project directory cannot be determined
-        Note: Creates any necessary parent directories automatically
-        Additionally, always returns the file's error/warning info after creation.
+        Returns one of:
+            - A success message and optional lint error info
+            - An error if the project dir is not found or file creation fails
     """.trimIndent()
 
     override fun handle(project: Project, args: CreateNewFileWithTextArgs): Response {
@@ -218,29 +215,45 @@ class CreateNewFileWithTextTool : AbstractMcpTool<CreateNewFileWithTextArgs>() {
             ?: return Response(error = "can't find project dir")
 
         val path = projectDir.resolveRel(args.pathInProject)
-        if (!path.exists()) {
-            path.createParentDirectories().createFile()
-        }
-        val text = args.text
-        path.writeText(text.unescape())
-        val vFile = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
 
-        // Ensure document and PSI are up-to-date before error analysis
-        if (vFile != null) {
-            val document: Document? = FileDocumentManager.getInstance().getDocument(vFile)
-            if (document != null) {
-                FileDocumentManager.getInstance().saveDocument(document)
-                PsiDocumentManager.getInstance(project).commitDocument(document)
+        ApplicationManager.getApplication().invokeAndWait {
+            WriteCommandAction.runWriteCommandAction(project) {
+                if (!path.exists()) {
+                    path.createParentDirectories().createFile()
+                }
+                path.writeText(args.text.unescape())
+                val vFile = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
+                vFile?.let {
+                    FileDocumentManager.getInstance().getDocument(it)?.let { doc ->
+                        FileDocumentManager.getInstance().saveDocument(doc)
+                    }
+                }
             }
         }
 
-        // Always return file errors after creation
-        val errorTool = GetFileErrorsByPathTool()
-        return errorTool.handle(project, GetFileErrorsArgs(args.pathInProject))
+        // // Run validation (lint) after creation
+        // val validationResults = RunLintForFileTool().handle(
+        //     project,
+        //     RunLintForFileArgs(args.pathInProject)
+        // )
+
+        // return if (validationResults.error != null) {
+        //     Response(
+        //         "File created, but lint validation failed.",
+        //         error = validationResults.error
+        //     )
+        // } else {
+        //     Response(
+        //         "File created and validated successfully.\n\n${validationResults.content}"
+        //     )
+        // }
+        return Response("ok")
     }
 
-    private fun String.unescape(): String = removePrefix("<![CDATA[").removeSuffix("]]>")
+    private fun String.unescape(): String =
+        removePrefix("<![CDATA[").removeSuffix("]]>")
 }
+
 
 
 @Serializable
