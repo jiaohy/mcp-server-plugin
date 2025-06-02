@@ -86,6 +86,7 @@ class GetCurrentFileErrorsTool : AbstractMcpTool<NoArgs>() {
     }
 }
 
+
 class GetProblemsTools : AbstractMcpTool<NoArgs>() {
     override val name: String = "get_project_problems"
     override val description: String = """
