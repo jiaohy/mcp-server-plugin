@@ -54,7 +54,10 @@ fun Path.relativizeByProjectDir(projDir: Path?): String =
     projDir?.relativize(this)?.pathString ?: this.absolutePathString()
 
 @Serializable
-data class SearchInFilesArgs(val searchText: String)
+data class SearchInFilesArgs(
+    val searchText: String,
+    val fileGlob: String? = null // Optional glob pattern, e.g. "*.kt"
+)
 
 class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<SearchInFilesArgs>() {
     override val name: String = "search_in_files_content"
@@ -62,8 +65,12 @@ class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<S
         Searches for a text substring within all files in the project using IntelliJ's search engine.
         Use this tool to find files containing specific text content.
         Requires a searchText parameter specifying the text to find.
+        Optionally accepts a fileGlob parameter (e.g. "*.kt") to restrict search to matching files.
         Returns a JSON array of objects containing file information:
         - path: Path relative to project root
+        - name: File name
+        - line: Line number (1-based) where the match was found
+        - content: The content of the matching line
         Returns an empty array ([]) if no matches are found.
         Note: Only searches through text files within the project directory.
     """
@@ -73,8 +80,19 @@ class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<S
             ?: return Response(error = "Project directory not found")
 
         val searchSubstring = args.searchText
-        if (searchSubstring.isNullOrBlank()) {
-            return Response(error = "contentSubstring parameter is required and cannot be blank")
+        if (searchSubstring.isBlank()) {
+            return Response(error = "searchText parameter is required and cannot be blank")
+        }
+
+        // Prepare file filter if fileGlob is provided
+        val fileGlob = args.fileGlob
+        val fileRegex: Regex? = fileGlob?.let {
+            // Convert glob to regex
+            val regex = it
+                .replace(".", "\\.")
+                .replace("*", ".*")
+                .replace("?", ".")
+            Regex("^$regex$")
         }
 
         val findModel = FindManager.getInstance(project).findInProjectModel.clone()
@@ -88,10 +106,30 @@ class SearchInFilesContentTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<S
 
         val processor = Processor<UsageInfo> { usageInfo ->
             val virtualFile = usageInfo.virtualFile ?: return@Processor true
+            // Filter by fileGlob if provided
+            if (fileRegex != null && !fileRegex.matches(virtualFile.name)) {
+                return@Processor true
+            }
             try {
                 val relativePath = projectDir.relativize(Path(virtualFile.path)).toString()
-                results.add("""{"path": "$relativePath", "name": "${virtualFile.name}"}""")
-            } catch (e: IllegalArgumentException) {
+                val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(virtualFile)
+                val lineNumber = usageInfo.navigationOffset?.let { offset ->
+                    document?.getLineNumber(offset)
+                } ?: usageInfo.segment?.startOffset?.let { offset ->
+                    document?.getLineNumber(offset)
+                }
+                val lineNum = (lineNumber ?: 0) + 1 // 1-based
+                val lineContent = document?.let {
+                    if (lineNumber != null && lineNumber >= 0 && lineNumber < it.lineCount) {
+                        val start = it.getLineStartOffset(lineNumber)
+                        val end = it.getLineEndOffset(lineNumber)
+                        it.getText(com.intellij.openapi.util.TextRange(start, end)).replace("\"", "\\\"")
+                    } else ""
+                } ?: ""
+                results.add(
+                    """{"path": "$relativePath", "name": "${virtualFile.name}", "line": $lineNum, "content": "$lineContent"}"""
+                )
+            } catch (_: IllegalArgumentException) {
             }
             true
         }
@@ -130,18 +168,24 @@ class GetRunConfigurationsTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<N
 }
 
 @Serializable
-data class RunConfigArgs(val configName: String)
+data class RunConfigArgs(val configName: String = "app")
 
-class RunConfigurationTool : AbstractMcpTool<RunConfigArgs>() {
-    override val name: String = "run_configuration"
+// TODO(krishansubudhi): Not returning output for now — debug later if needed
+
+class RunTool : AbstractMcpTool<RunConfigArgs>() {
+    override val name: String = "run_app"
     override val description: String =
-        "Run a specific run configuration in the current project and wait up to 120 seconds for it to finish. " +
-                "Use this tool to run a run configuration that you have found from the \"get_run_configurations\" tool. " +
-                "Returns the output (stdout/stderr) of the execution, prefixed with 'ok\\n' on success (exit code 0). " +
-                "Returns '<error message>' if the configuration is not found, times out, fails to start, or finishes with a non-zero exit code."
+        "Runs a specific run configuration in the current project, defaulting to 'app' if none is provided. " +
+        "Use this tool with configurations listed by the \"get_run_configurations\" tool. " +
+        "It waits up to 10 seconds for the run to start and returns an error if the configuration is not found, fails to start, or exits with a non-zero code. " +
+        "Note: This tool does not currently capture or return output from the run. " +
+        "If it times out without an error, the app may have launched successfully. " +
+        "If you see a 'No runner available' error, verify the configuration and try syncing your Gradle project." +
+        "This tool has bugs and may not work correctly in all cases. "
+
 
     // Timeout in seconds
-    private val executionTimeoutSeconds = 120L
+    val executionTimeoutSeconds = 10L
 
     override fun handle(project: Project, args: RunConfigArgs): Response {
         val runManager = RunManager.getInstance(project)
@@ -164,7 +208,7 @@ class RunConfigurationTool : AbstractMcpTool<RunConfigArgs>() {
                     return@invokeLater
                 }
 
-                val environment = ExecutionEnvironmentBuilder.create(project, executor, settings.configuration).build()
+                val environment = ExecutionEnvironmentBuilder.create(executor, settings).build()
 
                 val callback = object : ProgramRunner.Callback {
                     override fun processStarted(descriptor: RunContentDescriptor?) {
@@ -230,7 +274,7 @@ class RunConfigurationTool : AbstractMcpTool<RunConfigArgs>() {
                 Response(error = "Execution failed with exit code $exitCode.\nOutput:\n$output")
             }
         } catch (e: TimeoutException) {
-            return Response(error = "Execution timed out after $executionTimeoutSeconds seconds.")
+            return Response("Timed out without error. But can not guarantee that the run configuration was executed successfully. ")
         } catch (e: ExecutionException) {
             val causeMessage = e.cause?.message ?: e.message
             return Response(error = "Failed to execute run configuration: $causeMessage")
@@ -342,6 +386,21 @@ class ExecuteActionByIdTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<Exec
         return Response("ok")
     }
 }
+
+// class RunAppTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
+//     override val name: String = "run_app"
+//     override val description: String = """
+//     Runs the main application in the current project.
+//     This tool executes the "Run" action, which typically starts the main application configured in the project.
+//     Requires no parameters.
+//     Returns "ok" if the action was successfully executed.
+//     Note: This tool does not wait for the application to finish running.
+//     """.trimIndent()
+//     override fun handle(project: Project, args: NoArgs): Response {
+//         return ExecuteActionByIdTool().handle(project, ExecuteActionArgs(actionId = "Run"))
+//     }
+// }
+
 
 class GetProgressIndicatorsTool : org.jetbrains.mcpserverplugin.AbstractMcpTool<NoArgs>() {
     override val name: String = "get_progress_indicators"
